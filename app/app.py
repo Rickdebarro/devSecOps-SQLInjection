@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from markupsafe import Markup 
 
 #db_connect = create_engine('mysql://root:my-password@db/my_database')
-db_connect = create_engine('sqlite:///mydb.db', echo=True)
+db_connect = create_engine('sqlite:///../mydb.db', echo=True)
 
 app = Flask(__name__)
 
