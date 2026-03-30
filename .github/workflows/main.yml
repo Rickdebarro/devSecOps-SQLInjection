@@ -1,0 +1,25 @@
+name: Semgrep SAST
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    container:
+      image: returntocorp/semgrep
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        run: semgrep scan --sarif --output=report.sarif --config=auto
+
+      - name: Upload SARIF file (Report)
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: report.sarif
+        if: always()
