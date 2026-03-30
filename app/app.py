@@ -8,7 +8,6 @@ from markupsafe import Markup
 db_connect = create_engine('sqlite:///../mydb.db', echo=True)
 
 app = Flask(__name__)
-
 app.config['SQLALCHEMY_DATABASE_URI'] = db_connect
 
 @app.route("/")
@@ -17,6 +16,7 @@ def home():
 
 @app.route("/login", methods=["POST", "GET"])
 def login():
+    conn = db_connect.connect()
     
     if request.method == 'POST':
         # Recuperar parâmetros passados via formuláruo
@@ -26,72 +26,26 @@ def login():
         if not (username_from_form and password_from_form):
             return 'Informe um usuário e senha!', 400
         
-        conn = db_connect.connect()
 
-        #sql_Query_Not_Injection = text("SELECT * FROM users WHERE username=:username AND password=:password")
-        #result = conn.execute(sql_Query_Not_Injection, parameters=dict(username = username_from_form
-        #                                                               , password = password_from_form))
-        
-        sql_Query_Injection_False_Negative = text("SELECT * FROM users WHERE username = '" + username_from_form + "'"
-                                               " AND password = " + password_from_form)                                         
-        result = conn.execute(sql_Query_Injection_False_Negative)
+        sql_query = text("SELECT * FROM users WHERE username = :username AND password = :password")
+        result = conn.execute(sql_query, {"username": username_from_form, "password": password_from_form})
 
-        content = "<table>"
-        content = content + str("<tr>")
-        content = content + str("<th>id</th>")
-        content = content + str("<th>username</th>")
-        content = content + str("<th>password</th>")
-        content = content + str("</tr>")
-
-        for column in result:
-            content = content + str("<tr>")
-            content = content + str("<td>"+str(column[0])+"</td>")
-            content = content + str("<td>"+str(column[1])+"</td>")
-            content = content + str("<td>"+str(column[2])+"</td>")
-            content = content + str("</tr>")            
-
-        content = content + str("</table>")
-        result = Markup(content)
-
-        return render_template('index.html', result=result)
-
-    if request.method == 'GET':
-        # Recuperar parâmetros passados via URL após "?"
-        id = request.args.get('id')
+    elif request.method == 'GET':
         username_from_url = request.args.get('username')
         password_from_url = request.args.get('password')
         
-        conn = db_connect.connect()
+        if not (username_from_url and password_from_url):
+             return 'Parâmetros ausentes!', 400
 
-        #sql_Query_Not_Injection = text("SELECT * FROM users WHERE id=:user_id")
-        #result = conn.execute(sql_Query_Not_Injection, parameters=dict(user_id = id))
-        
-        sql_Query_Injection_False_Negative = text("SELECT * FROM users WHERE username = '" + username_from_url + "'"
-                                                " AND password = " + password_from_url)                                         
-        result = conn.execute(sql_Query_Injection_False_Negative)
+        sql_query = text("SELECT * FROM users WHERE username = :username AND password = :password")
+        result = conn.execute(sql_query, {"username": username_from_url, "password": password_from_url})
 
-        # deprecated in SQLAlchemy >=2.0
-        #sql_Query_Injection = "SELECT * FROM users WHERE id={}".format(id)
-        #result = conn.execute(sql_Query_Injection)
-
-        content = "<table>"
-        content = content + str("<tr>")
-        content = content + str("<th>id</th>")
-        content = content + str("<th>username</th>")
-        content = content + str("<th>password</th>")
-        content = content + str("</tr>")
-
-        for column in result:
-            content = content + str("<tr>")
-            content = content + str("<td>"+str(column[0])+"</td>")
-            content = content + str("<td>"+str(column[1])+"</td>")
-            content = content + str("<td>"+str(column[2])+"</td>")
-            content = content + str("</tr>")            
-
-        content = content + str("</table>")
-        result = Markup(content)
-
-        return render_template('index.html', result=result)
+    content = "<table><tr><th>id</th><th>username</th><th>password</th></tr>"
+    for column in result:
+        content += f"<tr><td>{column[0]}</td><td>{column[1]}</td><td>{column[2]}</td></tr>"
+    content += "</table>"
     
+    return render_template('index.html', result=Markup(content))
+
 if __name__ == "__main__":
     app.run()
