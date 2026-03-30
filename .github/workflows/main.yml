@@ -1,25 +1,88 @@
-name: Semgrep SAST
+name: Security Scan (SAST)
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main", "master" ]
   pull_request:
-    branches: ["main"]
+    branches: [ "main", "master" ]
+  workflow_dispatch:
 
 jobs:
-  semgrep:
+  semgrep-sast:
     runs-on: ubuntu-latest
     container:
-      image: returntocorp/semgrep
+      image: returntocorp/semgrep # Imagem oficial do Semgrep para gerar o JSON
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Run Semgrep
-        run: semgrep scan --sarif --output=report.sarif --config=auto
+        run: |
+          semgrep scan --json --output=gl-sast-report.json --config=auto
 
-      - name: Upload SARIF file (Report)
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Upload SAST Report
+        uses: actions/upload-artifact@v4
         with:
-          sarif_file: report.sarif
-        if: always()
+          name: sast-report
+          path: gl-sast-report.json
+
+  check-sast-report:
+    runs-on: ubuntu-latest
+    needs: semgrep-sast # Garante a ordem de execução (estágios)
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Download SAST Report
+        uses: actions/download-artifact@v4
+        with:
+          name: sast-report
+
+      - name: Validate SAST Report
+        run: |
+          echo "Validando o relatório SAST..."
+          python -c "
+          import json
+          import sys
+
+          try:
+              with open('gl-sast-report.json') as f:
+                  report = json.load(f)
+          except FileNotFoundError:
+              print('Erro: Relatório não encontrado.')
+              sys.exit(1)
+
+          # O Semgrep gera um formato JSON ligeiramente diferente do template padrão do GitLab, 
+          # mas para manter a lógica do seu script original que busca a chave 'vulnerabilities':
+          vulnerabilities = report.get('vulnerabilities', report.get('results', []))
+
+          if vulnerabilities:
+              print(f'\n== Relatório de Vulnerabilidades ({len(vulnerabilities)} encontradas) ==')
+              for vuln in vulnerabilities:
+                  # Ajuste de mapeamento para compatibilidade com Semgrep nativo ou GitLab JSON
+                  name = vuln.get('extra', {}).get('message', vuln.get('name', 'Sem nome'))
+                  description = vuln.get('description', 'Sem descrição').replace('\n', ' ')
+                  
+                  # No Semgrep nativo, a localização fica em 'path'
+                  location = vuln.get('location', {})
+                  file = location.get('file', vuln.get('path', 'Arquivo não especificado'))
+                  start_line = location.get('start_line', vuln.get('start', {}).get('line', '?'))
+                  end_line = location.get('end_line', vuln.get('end', {}).get('line', '?'))
+                  
+                  severity = vuln.get('severity', vuln.get('extra', {}).get('severity', 'Desconhecida'))
+
+                  print(f'\n- Nome: {name}')
+                  print(f'  Severidade: {severity}')
+                  print(f'  Descrição: {description}')
+                  print(f'  Arquivo: {file}')
+                  print(f'  Linhas: {start_line}-{end_line}')
+              
+              sys.exit(0)
+          else:
+              print('Nenhuma vulnerabilidade encontrada.')
+          "
